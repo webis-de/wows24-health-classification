@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
-from pathlib import Path
 import string
+from argparse import ArgumentParser
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from tira.third_party_integrations import get_output_directory, ir_datasets
 from nltk import word_tokenize
+from tira.third_party_integrations import get_output_directory, ir_datasets
 
 DATA_DIR = Path(__file__).parent / "data"
 
 
-def process_document(document, dw):
-    tokens = set(token.lower() for token in word_tokenize(document.default_text()))
+def process_item(item, dw):
+    tokens = set(token.lower() for token in word_tokenize(item.default_text()))
     tokens = tokens - set(string.punctuation)
     scores = dw.reindex(list(tokens)).fillna(0).agg(["mean", "median"])
-    out = {attr: getattr(document, attr) for attr in document._fields}
+    out = {attr: getattr(item, attr) for attr in item._fields}
     out["mean_health_score"] = round(scores.loc["mean", "encyclopedia"], 4)
     out["median_health_score"] = round(scores.loc["median", "encyclopedia"], 4)
     out["mean_medical_score"] = round(scores.loc["mean", "pubmed"], 4)
@@ -57,7 +58,7 @@ def discriminative_weight(
     return contrastive * specificity
 
 
-def process_documents(document_iter):
+def process_iter(document_iter):
     cf = pd.read_parquet(
         DATA_DIR / "wikipedia_unigram_cf.parquet", columns=["corpus_frequency"]
     ).rename(columns={"corpus_frequency": "wikipedia"})
@@ -75,23 +76,30 @@ def process_documents(document_iter):
     )
     cf = cf.fillna(0)
     dw = discriminative_weight(cf)
-    return pd.DataFrame([process_document(doc, dw) for doc in document_iter])
+    return pd.DataFrame([process_item(doc, dw) for doc in document_iter])
 
 
 if __name__ == "__main__":
-    # In the TIRA sandbox, this is the injected ir_dataset, injected via the environment variable TIRA_INPUT_DIRECTORY
+    parser = ArgumentParser()
+    parser.add_argument(
+        "--field", type=str, required=True, choices=["query", "document"]
+    )
+    args = parser.parse_args()
+
     dataset = ir_datasets.load(
         "workshop-on-open-web-search/document-processing-20231027-training"
     )
 
-    # The expected output directory, injected via the environment variable TIRA_OUTPUT_DIRECTORY
     output_dir = get_output_directory(".")
 
-    # Document processors persist their results in a file documents.jsonl.gz in the output directory.
-    output_file = Path(output_dir) / "documents.jsonl.gz"
+    if args.field == "query":
+        output_file = Path(output_dir) / "queries.jsonl"
+        iterator = dataset.queries_iter()
+    elif args.field == "document":
+        output_file = Path(output_dir) / "documents.jsonl.gz"
+        iterator = dataset.docs_iter()
+    else:
+        raise ValueError(f"Unknown field: {args.field}")
 
-    # You can pass as many additional arguments to your prolgram, e.g., via argparse, to modify the behaviour
-
-    # process the documents, store results at expected location.
-    processed_documents = process_documents(dataset.docs_iter())
-    processed_documents.to_json(output_file, lines=True, orient="records")
+    processed = process_iter(iterator)
+    processed.to_json(output_file, lines=True, orient="records")
