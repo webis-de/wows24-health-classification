@@ -15,11 +15,12 @@ def process_item(item, dw):
     tokens = set(token.lower() for token in word_tokenize(item.default_text()))
     tokens = tokens - set(string.punctuation)
     scores = dw.reindex(list(tokens)).fillna(0).agg(["mean", "median"])
-    out = {attr: getattr(item, attr) for attr in item._fields}
-    out["mean_health_score"] = round(scores.loc["mean", "encyclopedia"], 4)
-    out["median_health_score"] = round(scores.loc["median", "encyclopedia"], 4)
-    out["mean_medical_score"] = round(scores.loc["mean", "pubmed"], 4)
-    out["median_medical_score"] = round(scores.loc["median", "pubmed"], 4)
+    out = {
+        "mean_health_score": round(scores.loc["mean", "encyclopedia"], 4),
+        "median_health_score": round(scores.loc["median", "encyclopedia"], 4),
+        "mean_medical_score": round(scores.loc["mean", "pubmed"], 4),
+        "median_medical_score": round(scores.loc["median", "pubmed"], 4),
+    }
     return out
 
 
