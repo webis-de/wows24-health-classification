@@ -15,7 +15,10 @@ def process_item(item, dw):
     tokens = set(token.lower() for token in word_tokenize(item.default_text()))
     tokens = tokens - set(string.punctuation)
     scores = dw.reindex(list(tokens)).fillna(0).agg(["mean", "median"])
+    key = "query_id" if hasattr(item, "query_id") else "doc_id"
+    value = item.query_id if hasattr(item, "query_id") else item.doc_id
     out = {
+        key: value,
         "mean_health_score": round(scores.loc["mean", "encyclopedia"], 4),
         "median_health_score": round(scores.loc["median", "encyclopedia"], 4),
         "mean_medical_score": round(scores.loc["mean", "pubmed"], 4),
